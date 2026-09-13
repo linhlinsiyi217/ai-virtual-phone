@@ -15,7 +15,7 @@ import type {
     MixTextMaterial,
     MixTicketVar,
 } from "@/lib/mixology/types";
-import { createMixId, formatMixTags, MIX_KIND_LABELS, MIX_PANEL_DEFAULT_LAYOUT, MIX_SECTION_TITLE_DEFAULTS, MIX_TAG_MAX, mixPanelLayoutOf, normalizeMixConnectorNames, normalizeMixDialogueButton, parseMixTags, type MixSectionTitleKey } from "@/lib/mixology/types";
+import { createMixId, formatMixTags, MIX_KIND_LABELS, MIX_PANEL_DEFAULT_LAYOUT, MIX_SECTION_TITLE_DEFAULTS, MIX_TAG_MAX, mixPanelLayoutOf, normalizeMixConnectorNames, parseMixTags, type MixSectionTitleKey } from "@/lib/mixology/types";
 import { applyMixFilterRules } from "@/lib/mixology/prose";
 import { createBuiltinChecklist } from "@/lib/mixology/builtin";
 import {
@@ -227,10 +227,9 @@ export function MixMaterialEditor({ kind, initial, onSave, onCancel }: EditorPro
     // 界面要用的连接器名字（逗号隔开）；只有声明过的名字 mix.call 才放行
     const [connectorsText, setConnectorsText] = useState(initial?.kind === "mechanism" ? (initial.connectors ?? []).join(", ") : "");
     const connectorNames = useMemo(() => normalizeMixConnectorNames(connectorsText), [connectorsText]);
-    // 对白按钮：填了图标，宿主就在每句「对白」后画一颗，点击递进界面（onMixDialogue）
-    const [dialogueIcon, setDialogueIcon] = useState(initial?.kind === "mechanism" ? initial.dialogueButton?.icon ?? "" : "");
-    const [dialogueTitle, setDialogueTitle] = useState(initial?.kind === "mechanism" ? initial.dialogueButton?.title ?? "" : "");
-    const dialogueButton = useMemo(() => normalizeMixDialogueButton({ icon: dialogueIcon, title: dialogueTitle }), [dialogueIcon, dialogueTitle]);
+    // 对白按钮由代码自己登记（window.mix.dialogueButton / mix.dialogueButton），编辑器不设框；
+    // 老材料上填过的原样保留，仍然生效
+    const dialogueButton = initial?.kind === "mechanism" ? initial.dialogueButton : undefined;
 
     /**
      * 从契约正文里认出「字段名：说明」这样的行，做成一排可点的候选。
@@ -858,7 +857,7 @@ export function MixMaterialEditor({ kind, initial, onSave, onCancel }: EditorPro
                             style={{ minHeight: 200 }}
                             value={script}
                             onChange={(e) => setScript(e.target.value)}
-                            placeholder={trusted ? "信任模式：整段代码进对局时在页面里执行一次，用 mix 登记坑位和钩子。\n\nmix.slot(名字, (el, ctx) => { … return 清理函数 })   坑位：turn 每轮正文下方一块 / prose 每轮正文容器本身 / float 铺满对局画面的悬浮层 / bottom 最新一轮之下\n  ctx: { turnId, text, index, state, store, charName, userName }\nmix.on(时机, fn)   sessionStart / beforeSend / rawReply / afterReply / sessionEnd（与沙盒同一套 ctx 与返回；rawReply 在剥状态栏前收 ctx.raw、可返回 raw）；dialogue 收 { id, text, turnId }\nmix.state / mix.store / mix.setState(obj) / mix.setStore(obj) / mix.say(text) / mix.toast(text)\nmix.call(连接器名, 参数) → Promise<{status, data}> / mix.play(id, 音频, type) / mix.stop() / mix.mark(id, 状态) / mix.refresh()\n\n例：每轮正文下面画一行按钮，点了以玩家身份发言\nmix.slot('turn', function (el, ctx) {\n  el.innerHTML = '<button>继续</button>';\n  el.querySelector('button').onclick = function () { mix.say('（继续）'); };\n});\nmix.on('afterReply', function (ctx) { return { store: { 轮数: String(ctx.turnCount) } }; });" : "每个函数收一份 ctx，返回一个对象（不返回就是什么都不改）。\nctx: { turnCount, state, store, charName, userName, text, ticketRaw, encoreRaw, lastReply（发送前：最近一条 AI 消息将发给模型的全文） }\n可返回: { text, note, sections, lastReply（整条换掉最近一条 AI 消息，只改请求不落库）, state, store }\n\n例：玩家打「/掷骰」时换成一段带结果的指令\nfunction onBeforeSend(ctx) {\n  if (ctx.text !== \"/掷骰\") return;\n  var n = 1 + Math.floor(Math.random() * 20);\n  return { text: \"（我掷出了 \" + n + \" 点）\" };\n}\n\n例：连着三轮好感度上涨就提醒一次\nfunction onAfterReply(ctx) {\n  var up = Number(ctx.store.连涨 || 0);\n  return { store: { 连涨: String(up + 1) } };\n}"}
+                            placeholder={trusted ? "信任模式：整段代码进对局时在页面里执行一次，用 mix 登记坑位和钩子。\n\nmix.slot(名字, (el, ctx) => { … return 清理函数 })   坑位：turn 每轮正文下方一块 / prose 每轮正文容器本身 / float 铺满对局画面的悬浮层 / bottom 最新一轮之下\n  ctx: { turnId, text, index, state, store, charName, userName }\nmix.on(时机, fn)   sessionStart / beforeSend / rawReply / afterReply / sessionEnd（与沙盒同一套 ctx 与返回；rawReply 在剥状态栏前收 ctx.raw、可返回 raw）；dialogue 收 { id, text, turnId }\nmix.state / mix.store / mix.setState(obj) / mix.setStore(obj) / mix.say(text) / mix.toast(text)\nmix.call(连接器名, 参数) → Promise<{status, data}> / mix.play(id, 音频, type) / mix.stop() / mix.mark(id, 状态) / mix.dialogueButton({icon, title}) / mix.refresh()\n\n例：每轮正文下面画一行按钮，点了以玩家身份发言\nmix.slot('turn', function (el, ctx) {\n  el.innerHTML = '<button>继续</button>';\n  el.querySelector('button').onclick = function () { mix.say('（继续）'); };\n});\nmix.on('afterReply', function (ctx) { return { store: { 轮数: String(ctx.turnCount) } }; });" : "每个函数收一份 ctx，返回一个对象（不返回就是什么都不改）。\nctx: { turnCount, state, store, charName, userName, text, ticketRaw, encoreRaw, lastReply（发送前：最近一条 AI 消息将发给模型的全文） }\n可返回: { text, note, sections, lastReply（整条换掉最近一条 AI 消息，只改请求不落库）, state, store }\n\n例：玩家打「/掷骰」时换成一段带结果的指令\nfunction onBeforeSend(ctx) {\n  if (ctx.text !== \"/掷骰\") return;\n  var n = 1 + Math.floor(Math.random() * 20);\n  return { text: \"（我掷出了 \" + n + \" 点）\" };\n}\n\n例：连着三轮好感度上涨就提醒一次\nfunction onAfterReply(ctx) {\n  var up = Number(ctx.store.连涨 || 0);\n  return { store: { 连涨: String(up + 1) } };\n}"}
                         />
                     </Field>
                     {trusted ? null : (
@@ -869,7 +868,7 @@ export function MixMaterialEditor({ kind, initial, onSave, onCancel }: EditorPro
                             style={{ minHeight: 160 }}
                             value={panelHtml}
                             onChange={(e) => setPanelHtml(e.target.value)}
-                            placeholder={"<div style=\"padding:10px\">这里是常驻面板</div>\n\nwindow.mix\n  move(x, y) / size(w, h)         挪自己、改大小（占对局画面的百分比）\n  design(px)                      按多宽排版，画完整体缩放到面板大小；0 = 跟着面板走\n  fit(px)                         报内容多高\n  chrome(on) / plate(on)          要不要应用画的标题条 / 底板，默认都不画\n  drag(on) / resize(on)           玩家能不能拖、能不能缩放\n  z(n)                            叠放次序 0–9\n  grab()                          在自己画的标题条上 pointerdown 时调，接着由应用接管拖动\n  setStore(obj) / setState(obj)   写存储 / 写记住的值\n  say(text)                       以玩家身份说一句\n  call(name, params)              请宿主代调玩家配的连接器，返回 Promise<{status, data}>\n  mark(id, state)                 对白按钮状态回报：busy / playing / 空串\n  play(id, audio, type) / stop()  让宿主放一段音频（data: URL / ArrayBuffer / Uint8Array / Blob）\n  toast(text)                     给玩家弹一句短提示\nwindow.MIX_STATE / window.MIX_STORE  当前的值\nwindow.onMixDialogue({id, text, turnId})  玩家点了某句对白后的按钮（材料声明了对白按钮才有）\nwindow.onMixSync(state, store)       值变了会回调"}
+                            placeholder={"<div style=\"padding:10px\">这里是常驻面板</div>\n\nwindow.mix\n  move(x, y) / size(w, h)         挪自己、改大小（占对局画面的百分比）\n  design(px)                      按多宽排版，画完整体缩放到面板大小；0 = 跟着面板走\n  fit(px)                         报内容多高\n  chrome(on) / plate(on)          要不要应用画的标题条 / 底板，默认都不画\n  drag(on) / resize(on)           玩家能不能拖、能不能缩放\n  z(n)                            叠放次序 0–9\n  grab()                          在自己画的标题条上 pointerdown 时调，接着由应用接管拖动\n  setStore(obj) / setState(obj)   写存储 / 写记住的值\n  say(text)                       以玩家身份说一句\n  dialogueButton({icon, title})   在每句「对白」后画一颗按钮，点了收到 window.onMixDialogue({ id, text, turnId })\n  call(name, params)              请宿主代调玩家配的连接器，返回 Promise<{status, data}>\n  mark(id, state)                 对白按钮状态回报：busy / playing / 空串\n  play(id, audio, type) / stop()  让宿主放一段音频（data: URL / ArrayBuffer / Uint8Array / Blob）\n  toast(text)                     给玩家弹一句短提示\nwindow.MIX_STATE / window.MIX_STORE  当前的值\nwindow.onMixDialogue({id, text, turnId})  玩家点了某句对白后的按钮（材料声明了对白按钮才有）\nwindow.onMixSync(state, store)       值变了会回调"}
                         />
                     </Field>
                     )}
@@ -884,29 +883,6 @@ export function MixMaterialEditor({ kind, initial, onSave, onCancel }: EditorPro
                         <div className="mix-form-note">
                             连接器是玩家自己在酒柜里配的外部接口（地址和密钥只留在玩家本机），材料只声明名字。
                             名字用小写字母、数字、-、_。{connectorNames.length ? `将声明：${connectorNames.join("、")}` : ""}
-                        </div>
-                    </Field>
-                    <Field label="对白按钮" hint="选填">
-                        <div className="mix-conn-two">
-                            <input
-                                className="mix-input"
-                                value={dialogueIcon}
-                                onChange={(e) => setDialogueIcon(e.target.value)}
-                                placeholder="图标：speaker / play / translate / note / star / heart… 或一个 emoji"
-                                maxLength={4}
-                            />
-                            <input
-                                className="mix-input"
-                                value={dialogueTitle}
-                                onChange={(e) => setDialogueTitle(e.target.value)}
-                                placeholder="提示文字，如：朗读这句"
-                                maxLength={24}
-                            />
-                        </div>
-                        <div className="mix-form-note">
-                            填了图标，对局里每句「对白」后面就有这颗按钮；写内置名字（speaker / play / translate / note / bookmark / star / heart / quote / spark）画成与特调同色的线性图标，写 emoji 则原样显示。
-                            点击时界面收到 window.onMixDialogue({"{"} id, text, turnId {"}"})，可用 mix.mark(id, &quot;busy&quot; | &quot;playing&quot; | &quot;&quot;) 回报状态，
-                            mix.play(id, 音频) 让宿主播放。需要有界面代码才收得到；不想画面板就把摆放挂点设为 hidden。
                         </div>
                     </Field>
                     <MixPreviewInline

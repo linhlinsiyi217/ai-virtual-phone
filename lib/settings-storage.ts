@@ -1,4 +1,5 @@
 import type {
+    GenerationParameterKey,
     PresetConfig,
     WorldBookConfig,
     WorldBookEntry,
@@ -7,6 +8,7 @@ import type {
     ApiConfig,
     VoiceApiConfig,
     ImageGenerationSettings,
+    OpenAiImagePreset,
     BindingConfig,
     BindingSlot,
     CharacterBinding,
@@ -325,9 +327,9 @@ export function parsePresetFromJson(text: string, fallbackName: string = "导入
         if (typeof obj.openai_max_tokens === "number") preset.openai_max_tokens = obj.openai_max_tokens;
         if (typeof obj.openai_max_context === "number") preset.openai_max_context = obj.openai_max_context;
         if (Array.isArray(obj.enabled_generation_parameters)) {
-            preset.enabled_generation_parameters = [
-                ...new Set(obj.enabled_generation_parameters.filter(isGenerationParameterKey)),
-            ];
+            preset.enabled_generation_parameters = Array.from(
+                new Set<GenerationParameterKey>(obj.enabled_generation_parameters.filter(isGenerationParameterKey)),
+            );
         }
         // New preset globals
         if (typeof obj.top_a === "number") preset.top_a = obj.top_a;
@@ -725,6 +727,20 @@ function normalizeNovelAiPreset(preset: Partial<import("./settings-types").Novel
     };
 }
 
+function normalizeOpenAiPreset(preset: Partial<OpenAiImagePreset> | null | undefined, index: number): OpenAiImagePreset {
+    return {
+        id: typeof preset?.id === "string" && preset.id.trim() ? preset.id.trim() : `preset_openai_${Date.now()}_${index}`,
+        name: typeof preset?.name === "string" && preset.name.trim() ? preset.name.trim() : "默认方案",
+        requestMode: preset?.requestMode === "server" || preset?.requestMode === "direct" ? preset.requestMode : DEFAULT_IMAGE_GENERATION_SETTINGS.requestMode,
+        apiKey: typeof preset?.apiKey === "string" ? preset.apiKey : "",
+        baseUrl: typeof preset?.baseUrl === "string" ? preset.baseUrl : DEFAULT_IMAGE_GENERATION_SETTINGS.baseUrl,
+        model: typeof preset?.model === "string" ? preset.model : DEFAULT_IMAGE_GENERATION_SETTINGS.model,
+        size: typeof preset?.size === "string" ? preset.size : DEFAULT_IMAGE_GENERATION_SETTINGS.size,
+        quality: typeof preset?.quality === "string" ? preset.quality : DEFAULT_IMAGE_GENERATION_SETTINGS.quality,
+        extraPrompt: typeof preset?.extraPrompt === "string" ? preset.extraPrompt : "",
+    };
+}
+
 function normalizeImageGenerationSettings(settings: Partial<ImageGenerationSettings> | null | undefined): ImageGenerationSettings {
     const refs = settings?.characterReferences && typeof settings.characterReferences === "object"
         ? settings.characterReferences
@@ -743,6 +759,26 @@ function normalizeImageGenerationSettings(settings: Partial<ImageGenerationSetti
     const maxUploadBytes = typeof hosting.maxUploadBytes === "number"
         ? Math.max(64 * 1024, Math.min(32 * 1024 * 1024, Math.floor(hosting.maxUploadBytes)))
         : DEFAULT_IMAGE_GENERATION_SETTINGS.imageHosting.maxUploadBytes;
+
+    const rawOpenAiPresets = settings?.openaiPresets;
+    const openaiPresets = Array.isArray(rawOpenAiPresets) && rawOpenAiPresets.length > 0
+        ? rawOpenAiPresets.map((preset, index) => normalizeOpenAiPreset(preset, index))
+        : [normalizeOpenAiPreset({
+            id: "preset_openai_default",
+            name: "默认方案",
+            requestMode,
+            apiKey: settings?.apiKey,
+            baseUrl: settings?.baseUrl,
+            model: settings?.model,
+            size: settings?.size,
+            quality: settings?.quality,
+            extraPrompt: settings?.extraPrompt,
+        }, 0)];
+    const activeOpenAiPresetId = typeof settings?.activeOpenAiPresetId === "string"
+        && openaiPresets.some(preset => preset.id === settings.activeOpenAiPresetId)
+        ? settings.activeOpenAiPresetId
+        : openaiPresets[0].id;
+    const activeOpenAiPreset = openaiPresets.find(preset => preset.id === activeOpenAiPresetId) || openaiPresets[0];
 
     const rawNai = settings?.novelai;
     let naiPresets = Array.isArray(rawNai?.presets) && rawNai.presets.length > 0
@@ -763,7 +799,15 @@ function normalizeImageGenerationSettings(settings: Partial<ImageGenerationSetti
         ...DEFAULT_IMAGE_GENERATION_SETTINGS,
         ...(settings || {}),
         provider,
-        requestMode,
+        requestMode: activeOpenAiPreset.requestMode,
+        apiKey: activeOpenAiPreset.apiKey,
+        baseUrl: activeOpenAiPreset.baseUrl,
+        model: activeOpenAiPreset.model,
+        size: activeOpenAiPreset.size,
+        quality: activeOpenAiPreset.quality,
+        extraPrompt: activeOpenAiPreset.extraPrompt,
+        openaiPresets,
+        activeOpenAiPresetId,
         novelai,
         characterReferences: refs,
         imageHosting: {

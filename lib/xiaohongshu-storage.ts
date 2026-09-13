@@ -244,6 +244,12 @@ export function normalizeXiaohongshuComment(raw: unknown, fallbackNoteId = ""): 
   };
 }
 
+function normalizeAssetIdList(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const ids = value.map(id => cleanText(id, 160)).filter(Boolean);
+  return ids.length > 0 ? ids : undefined;
+}
+
 export function normalizeXiaohongshuNote(raw: unknown): XiaohongshuNote | null {
   if (!raw || typeof raw !== "object") return null;
   const record = raw as Record<string, unknown>;
@@ -278,6 +284,7 @@ export function normalizeXiaohongshuNote(raw: unknown): XiaohongshuNote | null {
     recentSaveNames: normalizeNameList(record.recentSaveNames ?? record.recent_save_names),
     comments,
     imageAssetId: cleanText(record.imageAssetId ?? record.image_asset_id, 160) || undefined,
+    imageAssetIds: normalizeAssetIdList(record.imageAssetIds ?? record.image_asset_ids),
     imageDescription: cleanMultiline(record.imageDescription ?? record.image_description, 500) || undefined,
     imageWidth: optionalPositiveNumber(record.imageWidth ?? record.image_width),
     imageHeight: optionalPositiveNumber(record.imageHeight ?? record.image_height),
@@ -381,6 +388,10 @@ export function saveXiaohongshuState(state: XiaohongshuState): XiaohongshuState 
 
 export function createUserXiaohongshuNote(input: XiaohongshuUserPostInput, profile: XiaohongshuUserProfile): XiaohongshuNote {
   const now = new Date().toISOString();
+  const imageAssetIds = (input.images && input.images.length > 0)
+    ? input.images.map(img => img.assetId).filter((id): id is string => Boolean(id))
+    : (input.image?.assetId ? [input.image.assetId] : undefined);
+  const primaryImage = input.images?.[0] || input.image;
   return {
     id: makeId("xhs_user_note"),
     type: "post",
@@ -389,7 +400,7 @@ export function createUserXiaohongshuNote(input: XiaohongshuUserPostInput, profi
     authorName: profile.nickname || "我",
     title: cleanText(input.title, 80) || cleanMultiline(input.body, 120).slice(0, 24) || "新的笔记",
     body: cleanMultiline(input.body, 3000),
-    coverIcon: input.image?.assetId ? "▧" : "✎",
+    coverIcon: (imageAssetIds && imageAssetIds.length > 0) || input.image?.assetId ? "▧" : "✎",
     tone: "ivory",
     tags: normalizeTags(input.tags),
     likeCount: 0,
@@ -400,10 +411,11 @@ export function createUserXiaohongshuNote(input: XiaohongshuUserPostInput, profi
     recentLikeNames: [],
     recentSaveNames: [],
     comments: [],
-    imageAssetId: input.image?.assetId,
-    imageDescription: cleanMultiline(input.image?.description, 500) || undefined,
-    imageWidth: optionalPositiveNumber(input.image?.width),
-    imageHeight: optionalPositiveNumber(input.image?.height),
+    imageAssetId: primaryImage?.assetId,
+    imageAssetIds: imageAssetIds && imageAssetIds.length > 0 ? imageAssetIds : undefined,
+    imageDescription: cleanMultiline(primaryImage?.description, 500) || undefined,
+    imageWidth: optionalPositiveNumber(primaryImage?.width),
+    imageHeight: optionalPositiveNumber(primaryImage?.height),
     createdAt: now,
     updatedAt: now,
   };

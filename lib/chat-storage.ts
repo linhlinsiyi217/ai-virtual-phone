@@ -269,6 +269,7 @@ export type ChatAppSettings = {
     enterToSendEnabled?: boolean; // When true, Enter sends chat input and Shift+Enter inserts a newline
     callVibrationEnabled?: boolean; // 语音/视频来电等待接听时循环振动（默认开；iOS 网页不支持振动则无效果）
     maxToolRounds?: number; // 单条消息的工具循环轮数上限（默认 5；每轮=一次模型请求，轮内调用条数不限）
+    floatingDockEnabled?: boolean; // 悬浮球贴边半隐藏收拢模式（默认关）
 };
 
 /** 单条消息工具循环轮数上限（默认 5，夹在 1–20 之间） */
@@ -550,6 +551,7 @@ const DEFAULT_CHAT_APP_SETTINGS: ChatAppSettings = {
     promptViewerEnabled: false,
     quickActionEnabled: false,
     enterToSendEnabled: false,
+    floatingDockEnabled: false,
 };
 
 // ── In-Memory Caches (hydrated from IndexedDB on startup) ──────────
@@ -1819,23 +1821,39 @@ export function updateChatMessage(
     return updated;
 }
 
-function replacePhotoDirectiveDescription(text: string | undefined, oldDescription: string, nextDescription: string): string | undefined {
+function replacePhotoDirectiveDescription(
+    text: string | undefined,
+    oldDescription: string,
+    nextDescription: string,
+    nextUseReferenceImage?: boolean,
+): string | undefined {
     const oldDesc = oldDescription.trim();
     const nextDesc = nextDescription.trim();
-    if (!text || !oldDesc || !nextDesc || oldDesc === nextDesc) return text;
+    // 原描述必须匹配到具体那一条照片标签才改：一条回复里可能有多张照片，
+    // 放宽成"原描述为空也改"会把其它照片的描述一并覆盖。
+    if (!text || !oldDesc || !nextDesc) return text;
 
     let changed = false;
     const withExplicitMode = text.replace(/\[照片[:：]\s*(使用参考图|不使用参考图)\s*[:：]\s*([^\]]+?)\]/g, (full, mode: string, desc: string) => {
         if (desc.trim() !== oldDesc) return full;
+        const targetMode = nextUseReferenceImage !== undefined
+            ? (nextUseReferenceImage ? "使用参考图" : "不使用参考图")
+            : mode;
+        if (targetMode === mode && desc.trim() === nextDesc) return full;
         changed = true;
-        return `[照片:${mode}:${nextDesc}]`;
+        return `[照片:${targetMode}:${nextDesc}]`;
     });
     if (changed) return withExplicitMode;
 
     return text.replace(/\[照片[:：]\s*([^\]]+?)\]/g, (full, desc: string) => {
         if (desc.trim() !== oldDesc) return full;
+        const targetMode = nextUseReferenceImage !== undefined
+            ? (nextUseReferenceImage ? "使用参考图" : "不使用参考图")
+            : undefined;
+        const replacement = targetMode ? `[照片:${targetMode}:${nextDesc}]` : `[照片:${nextDesc}]`;
+        if (replacement === full) return full;
         changed = true;
-        return `[照片:${nextDesc}]`;
+        return replacement;
     });
 }
 
@@ -1843,13 +1861,14 @@ export function syncChatGeneratedImagePromptText(
     messageId: string,
     oldDescription: string,
     nextDescription: string,
+    nextUseReferenceImage?: boolean,
 ): ChatMessage[] {
     const target = _messagesCache.find(m => m.id === messageId);
     if (!target) return [];
 
     const changed = new Map<string, ChatMessage>();
-    const targetNextRaw = replacePhotoDirectiveDescription(target.rawResponseText, oldDescription, nextDescription);
-    const targetNextEditable = replacePhotoDirectiveDescription(target.editableResponseText, oldDescription, nextDescription);
+    const targetNextRaw = replacePhotoDirectiveDescription(target.rawResponseText, oldDescription, nextDescription, nextUseReferenceImage);
+    const targetNextEditable = replacePhotoDirectiveDescription(target.editableResponseText, oldDescription, nextDescription, nextUseReferenceImage);
 
     if (target.rawResponseText && targetNextRaw && targetNextRaw !== target.rawResponseText && target.responseBatchId) {
         for (const msg of _messagesCache) {

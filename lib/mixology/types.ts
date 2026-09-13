@@ -551,9 +551,9 @@ export type MixMechanismMaterial = MixMaterialMeta & {
      */
     connectors?: string[];
     /**
-     * 对白按钮：装了这件机括的对局里，宿主在每句「对白」后面画一颗小图标，
-     * 点击把这句话递进常驻界面（window.onMixDialogue）。按钮由宿主画、样式统一，
-     * 界面只管收到之后做什么（比如请连接器合成语音）。需要有 panelHtml 才收得到。
+     * 对白按钮（旧写法，仍然认）：现在由代码自己登记——界面里 window.mix.dialogueButton({ icon, title })，
+     * 信任模式 mix.dialogueButton({ icon, title })。宿主在每句「对白」后面画一颗小图标，点击把这句话递进
+     * 界面（window.onMixDialogue）。编辑器里不再有这个框；老材料上填过的照常生效。
      */
     dialogueButton?: MixDialogueButton;
     /**
@@ -574,10 +574,15 @@ export type MixDialogueButton = {
 /** 对白按钮的状态（界面用 mix.mark 回报）：busy 转圈、playing 高亮、空串恢复 */
 export type MixDialogueState = "busy" | "playing" | "";
 
+/** 对白按钮的内置图标名（画成与特调同色系的线性图标）；不在这里的当 emoji / 单字原样显示 */
+export const MIX_DIALOGUE_ICON_NAMES = ["speaker", "play", "translate", "note", "bookmark", "star", "heart", "quote", "spark"] as const;
+
 export function normalizeMixDialogueButton(value: unknown): MixDialogueButton | undefined {
     if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
     const record = value as Record<string, unknown>;
-    const icon = typeof record.icon === "string" ? record.icon.trim().slice(0, 4) : "";
+    const rawIcon = typeof record.icon === "string" ? record.icon.trim() : "";
+    // 内置名字整个留下（"speaker" 截成 "spea" 就画不出图标了）；emoji / 单字最多四个字符
+    const icon = (MIX_DIALOGUE_ICON_NAMES as readonly string[]).includes(rawIcon.toLowerCase()) ? rawIcon.toLowerCase() : rawIcon.slice(0, 4);
     if (!icon) return undefined;
     const title = typeof record.title === "string" ? record.title.trim().slice(0, 24) : "";
     return title ? { icon, title } : { icon };
@@ -816,6 +821,11 @@ export type MixSession = {
      * 需要留住的状态放机括存储桶里）。
      */
     panelOpen?: Record<string, boolean>;
+    /**
+     * 机括在代码里登记过的对白按钮（materialId → 图标/提示）。按钮位面板关着时代码没跑、登记不到，
+     * 记住上一次登记的，重进对局照样先把按钮画出来。
+     */
+    dialogueButtons?: Record<string, MixDialogueButton>;
     /**
      * 退役的渲染皮（materialId → 渲染 HTML）：局中换小票/尾调那一刻，旧件的
      * 渲染代码快照进来，被盖了戳的历史轮（MixTurn.ticketId/encoreId）按这份

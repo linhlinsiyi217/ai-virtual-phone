@@ -235,7 +235,7 @@ const CONTENT_FIELDS: FieldSpec[] = [
     { key: "layout", kinds: ["mechanism"] },
     // 界面要用的连接器名字（字符串数组）；mix.call 只放行声明过的
     { key: "connectors", kinds: ["mechanism"] },
-    // 对白按钮：{icon, title}，宿主在每句对白后画图标，点击递进界面 onMixDialogue
+    // 对白按钮（旧写法，仍认）：{icon, title}。新写法是界面代码里 window.mix.dialogueButton({icon,title}) 登记
     { key: "dialogueButton", kinds: ["mechanism"] },
     // 信任模式：代码直接在页面里跑（不进沙盒）
     { key: "trusted", kinds: ["mechanism"] },

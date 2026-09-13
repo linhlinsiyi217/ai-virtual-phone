@@ -259,7 +259,7 @@ sections 只在 onBeforeSend 里有效，形如 [{ at: "world", text: "## 记忆
 
 ② 常驻界面（完整 HTML，可选）：跑在沙盒 iframe 里。用 window.MIX_STATE / window.MIX_STORE 读数据，定义 window.onMixSync(state, store) 接收更新；通过 window.mix 请求动作：setStore(obj)、setState(obj)、say(text) 以玩家身份发言、move(x,y) 与 size(w,h)（占对局画面的百分比）、fit(px) 报内容高度、design(px) 设排版基准宽度、drag(bool)/resize(bool)/chrome(bool)/plate(bool)、z(n)、grab() 在自绘标题条上起拖。界面初始无外壳无底板，位置与尺寸请在代码里用 mix.move / mix.size 自己定好。除自由悬浮外还有五个挂点（材料的 layout.slot 字段声明，代码里不可改）："header"/"inputbar-left"/"inputbar-right" 三个按钮位——宿主在标题栏或输入栏画一颗图标按钮（图标由 layout.icon 给一两个 emoji），点击开合面板，面板宽度铺满、高度随内容，适合骰子/道具/快捷指令这类召之即来的工具；"flow-top"/"flow-bottom" 两个流内位——面板作为内嵌卡进滚动流（画布之下/最新一轮之下），随内容滚动，适合任务看板、选择器这类跟着剧情走的界面；"hidden"——不画面板，界面代码只在后台跑（配合对白按钮用）。非悬浮挂点下 move/size/drag/resize/chrome 无效，fit/design/plate 照常；按钮位面板关闭时会被卸载，要留住的状态写进 store。界面里可用的数据只有 MIX_STATE 与 MIX_STORE 两个对象——没有角色名、玩家名这类现成变量，需要就让钩子写进 store 再读；写完自查一遍：用到的每个变量都必须已声明。
 沙盒里没有网络。要调外部接口（语音合成、生图等）只能走连接器：连接器是玩家自己在酒柜里配的接口（地址、密钥、请求体模板都在玩家本机，材料碰不到），材料只在 connectors 字段里声明要用的名字（如 ["tts"]），界面里 mix.call("tts", { text: "…" }) 请宿主代调，返回 Promise，成功 resolve { status, data }（data 按玩家连接器的响应类型：JSON 对象 / 字符串 / 二进制转成的 data: URL），失败 reject（没声明、玩家没配、每分钟超过 30 次、网络错）。参数只能是扁平的字符串/数字/布尔。只在玩家点击后才调用，不要在同步回调或定时器里自动刷接口——那是在烧玩家的额度。以 MiniMax 语音为例：玩家用「MiniMax 语音」预设建一个叫 tts 的连接器后，mix.call("tts", { text }) 的 data.data.audio 是十六进制的 mp3，界面里按两位一字节解成 Uint8Array → Blob → URL.createObjectURL 交给 <audio> 播。
-对白按钮：材料声明 dialogueButton: { icon: "speaker", title: "朗读这句" } 后，宿主在对局每句「对白」后面画这颗图标（样式统一、沙盒不用管排版）。icon 写内置名字 speaker / play / translate / note / bookmark / star / heart / quote / spark 会画成与特调同色系的线性图标（优先用这些，别用 emoji，emoji 在各机型上长得不一样）。玩家点击时界面收到 window.onMixDialogue({ id, text, turnId })——text 是这句对白（不含「」），旧轮次也能点；界面用 mix.mark(id, "busy" | "playing" | "") 回报状态，宿主把图标画成转圈/播放中/恢复。同一句再点一次仍会收到事件，界面自己判断是停止还是重播。"点一句念一句""点一句翻译""点一句记进笔记"这类玩法都用它，不要再用钩子把正文抄进 store 再让玩家从面板里选。
+对白按钮：界面代码启动时调 window.mix.dialogueButton({ icon: "speaker", title: "朗读这句" })（信任模式在 script 里调 mix.dialogueButton(...)）登记后，宿主在对局每句「对白」后面画这颗图标（样式统一、沙盒不用管排版）。icon 写内置名字 speaker / play / translate / note / bookmark / star / heart / quote / spark 会画成与特调同色系的线性图标（优先用这些，别用 emoji，emoji 在各机型上长得不一样）。玩家点击时界面收到 window.onMixDialogue({ id, text, turnId })——text 是这句对白（不含「」），旧轮次也能点；界面用 mix.mark(id, "busy" | "playing" | "") 回报状态，宿主把图标画成转圈/播放中/恢复。同一句再点一次仍会收到事件，界面自己判断是停止还是重播。"点一句念一句""点一句翻译""点一句记进笔记"这类玩法都用它，不要再用钩子把正文抄进 store 再让玩家从面板里选。
 音频一律交给宿主放：mix.play(id, audio, type)（audio 收 data: URL、ArrayBuffer、Uint8Array 或 Blob；type 默认 audio/mpeg；传了 id 那颗按钮自动标播放中、放完自动恢复），mix.stop() 停。不要在界面里自己 new Audio().play()——对白按钮的点击落在宿主上，沙盒没有手势，iOS 会拦掉。
 无界面机括：只靠对白按钮/钩子驱动、不需要画面板的机括（如朗读），layout.slot 写 "hidden"——界面代码照常在看不见的沙盒里跑，收事件、调连接器、mix.play 都照常，只是什么都不画；要跟玩家说话用 mix.toast(text) 弹一句短提示。
 
@@ -276,7 +276,7 @@ sections 只在 onBeforeSend 里有效，形如 [{ at: "world", text: "## 记忆
 【标签】2~6 个短词，用顿号隔开
 【玩法方案】一两句话：这件机括怎么玩，钩子和界面各负责什么
 【需要的连接器】用到外部接口才写，逗号隔开的名字（如 tts）并说明玩家该配什么接口、mix.call 传什么参数；不需要则写"无"
-【对白按钮】要在每句对白后面画按钮才写：图标名 + 提示文字（如 speaker 朗读这句）；不需要则写"无"
+【对白按钮】要在每句对白后面画按钮的，在界面代码里调 window.mix.dialogueButton({ icon, title }) 登记（信任模式 mix.dialogueButton），不是单独的字段；不需要就不调
 【运行方式】沙盒（默认）或信任模式；信任模式要说明为什么非它不可
 【钩子逻辑】（不需要则写"无"）
 【界面代码】完整 HTML（不需要则写"无"）
@@ -340,7 +340,7 @@ rules＝数组 [{"find":"正则本体（不带斜杠定界符）","replace":"替
 name＝材料名；hook＝一句话介绍；tags＝字符串数组；script＝钩子逻辑纯 JS（可不传）；
 panelHtml＝常驻界面完整 HTML（可不传）；script 与 panelHtml 至少传一个；
 layout＝摆放对象（选填）：{"slot":"float|header|inputbar-left|inputbar-right|flow-top|flow-bottom|hidden","icon":"🎲","x":3,"y":62,"w":94,"h":20,"autoHeight":true,…}——slot 不写为自由悬浮；按钮位（header/inputbar-*）配 icon 一两个 emoji，宿主画按钮点击开合；流内位（flow-top/flow-bottom）嵌进滚动流随内容滚动。
-dialogueButton＝对象（选填）{"icon":"speaker","title":"朗读这句"}：宿主在每句对白后画这颗图标（icon 用内置名字 speaker/play/translate/note/bookmark/star/heart/quote/spark），点击递进界面 window.onMixDialogue({id,text,turnId})，界面 mix.mark(id, "busy"|"playing"|"") 回报状态、mix.play(id, 音频) 让宿主放、mix.toast(text) 提示玩家；layout.slot 可写 "hidden" 表示不画面板只在后台跑；
+对白按钮不是字段：界面代码里 window.mix.dialogueButton({"icon":"speaker","title":"朗读这句"})（信任模式 mix.dialogueButton）登记，宿主在每句对白后画这颗图标（icon 用内置名字 speaker/play/translate/note/bookmark/star/heart/quote/spark），点击递进界面 window.onMixDialogue({id,text,turnId})，界面 mix.mark(id, "busy"|"playing"|"") 回报状态、mix.play(id, 音频) 让宿主放、mix.toast(text) 提示玩家；layout.slot 可写 "hidden" 表示不画面板只在后台跑；
 trusted＝布尔（选填）：true 为信任模式，script 在页面里执行、用 mix.slot/mix.on 登记（见上文③），此时 panelHtml 不用；
 connectors＝字符串数组（选填，如 ["tts"]）：界面要用的连接器名字，只有声明过的名字 mix.call 才放行；连接器本身由用户在酒柜「连接器」里配（地址与密钥留在用户本机），你只声明名字并在界面里 mix.call(名字, 参数) 调用。
 图片细则：机括沙盒完全断网（CSP default-src 'none'），任何外链（含图床 URL）都加载不了，界面素材只能内联；调外部接口唯一的口子是连接器。`,

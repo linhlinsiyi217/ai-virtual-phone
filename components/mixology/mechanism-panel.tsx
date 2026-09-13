@@ -22,6 +22,8 @@ import {
     MIX_PANEL_MAX_Z,
     MIX_PANEL_MIN_H,
     MIX_PANEL_MIN_W,
+    normalizeMixDialogueButton,
+    type MixDialogueButton,
     type MixDialogueState,
     type MixPanelLayout,
     type MixState,
@@ -48,6 +50,7 @@ type PanelCommand =
     | { name: "dragEnd" }
     | { name: "call"; id: unknown; connector: unknown; params: unknown }
     | { name: "mark"; id: unknown; state: unknown }
+    | { name: "dialogueButton"; icon: unknown; title: unknown }
     | { name: "play"; id: unknown; audio: unknown; type: unknown }
     | { name: "stop" }
     | { name: "toast"; text: unknown };
@@ -271,6 +274,9 @@ export function buildPanelDoc(html: string, state: MixState, store: MixMechanism
     // 对白按钮的状态回报：宿主把那颗图标画成转圈（busy）/ 播放中（playing）/ 恢复（""）。
     // id 就是 onMixDialogue 收到的那个 id
     mark: function(id, state){ send("mark", { id: String(id == null ? "" : id), state: state || "" }); },
+    // 登记对白按钮：宿主在每句「对白」后画这颗图标，点击递进 window.onMixDialogue。
+    // icon 写内置名字（speaker / play / translate / note / bookmark / star / heart / quote / spark）或一个 emoji；传 null 撤掉
+    dialogueButton: function(spec){ spec = spec || {}; send("dialogueButton", { icon: spec.icon == null ? "" : String(spec.icon), title: spec.title == null ? "" : String(spec.title) }); },
     // 让宿主放一段音频（对白按钮的点击在宿主那边，iframe 自己 play 会被 iOS 拦）。
     // audio 收 data: URL 字符串、ArrayBuffer、Uint8Array 或 Blob；type 是 MIME（默认 audio/mpeg）。
     // 传了 id（onMixDialogue 收到的那个），那颗按钮会自动标成播放中、放完自动恢复。
@@ -404,6 +410,7 @@ export function MixMechanismPanel({
     onBox,
     connectors,
     onMark,
+    onDialogueButton,
     onToast,
 }: {
     materialId: string;
@@ -421,6 +428,8 @@ export function MixMechanismPanel({
     connectors?: string[];
     /** 界面用 mix.mark 回报某句对白按钮的状态 */
     onMark?: (materialId: string, id: string, state: MixDialogueState) => void;
+    /** 界面用 mix.dialogueButton 登记对白按钮（null = 撤掉） */
+    onDialogueButton?: (materialId: string, button: MixDialogueButton | null) => void;
     /** 界面用 mix.toast 给玩家弹一句短提示 */
     onToast?: (text: string) => void;
 }) {
@@ -711,6 +720,9 @@ export function MixMechanismPanel({
                     if (mark) onMark?.(materialId, mark.id, mark.state);
                     break;
                 }
+                case "dialogueButton":
+                    onDialogueButton?.(materialId, normalizeMixDialogueButton({ icon: command.icon, title: command.title }) ?? null);
+                    break;
                 case "play":
                     handlePlay(command, materialId, onMark, onToast);
                     break;
@@ -729,7 +741,7 @@ export function MixMechanismPanel({
         };
         window.addEventListener("message", onMessage);
         return () => window.removeEventListener("message", onMessage);
-    }, [materialId, onStore, onState, onSay, onBox, canDrag, applyBox, scale, post, connectors, onMark, onDialogueBoot, onToast]);
+    }, [materialId, onStore, onState, onSay, onBox, canDrag, applyBox, scale, post, connectors, onMark, onDialogueButton, onDialogueBoot, onToast]);
 
     const style: React.CSSProperties = {
         left: `${box.x}%`,
@@ -846,6 +858,7 @@ export function MixMechanismInline({
     onSay,
     connectors,
     onMark,
+    onDialogueButton,
     onToast,
 }: {
     materialId: string;
@@ -862,6 +875,8 @@ export function MixMechanismInline({
     connectors?: string[];
     /** 界面用 mix.mark 回报某句对白按钮的状态 */
     onMark?: (materialId: string, id: string, state: MixDialogueState) => void;
+    /** 界面用 mix.dialogueButton 登记对白按钮（null = 撤掉） */
+    onDialogueButton?: (materialId: string, button: MixDialogueButton | null) => void;
     /** 界面用 mix.toast 给玩家弹一句短提示 */
     onToast?: (text: string) => void;
 }) {
@@ -970,6 +985,9 @@ export function MixMechanismInline({
                     if (mark) onMark?.(materialId, mark.id, mark.state);
                     break;
                 }
+                case "dialogueButton":
+                    onDialogueButton?.(materialId, normalizeMixDialogueButton({ icon: command.icon, title: command.title }) ?? null);
+                    break;
                 case "play":
                     handlePlay(command, materialId, onMark, onToast);
                     break;
@@ -988,7 +1006,7 @@ export function MixMechanismInline({
         };
         window.addEventListener("message", onMessage);
         return () => window.removeEventListener("message", onMessage);
-    }, [materialId, onStore, onState, onSay, post, connectors, onMark, onDialogueBoot, onToast]);
+    }, [materialId, onStore, onState, onSay, post, connectors, onMark, onDialogueButton, onDialogueBoot, onToast]);
 
     const designWidth = designPx === null ? 0 : designPx;
     const scale = designWidth && width > 0 ? width / designWidth : 1;

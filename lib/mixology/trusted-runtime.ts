@@ -10,7 +10,7 @@
 // 一件机括 × 一个对局一份实例（进对局时建、退出时销毁）；材料被改过要重建。
 // 钩子的数据契约与沙盒版完全一致（MixHookPayload / MixHookResult），引擎按 trusted 分流。
 
-import type { MixDialogueState, MixMechanismMaterial, MixState } from "./types";
+import { normalizeMixDialogueButton, type MixDialogueButton, type MixDialogueState, type MixMechanismMaterial, type MixState } from "./types";
 import { normalizeHookResult, type MixHook, type MixHookPayload, type MixHookResult, type MixMechanismStore } from "./mechanism-protocol";
 import type { MixConnectorParams } from "./connectors";
 
@@ -43,6 +43,8 @@ export type MixTrustedHost = {
     say: (text: string) => void;
     toast: (text: string) => void;
     mark: (materialId: string, id: string, state: MixDialogueState) => void;
+    /** 代码登记对白按钮（传 null 撤掉）：宿主在每句对白后画这颗图标 */
+    dialogueButton: (materialId: string, button: MixDialogueButton | null) => void;
     call: (materialId: string, name: string, params: MixConnectorParams) => Promise<{ status: number; data: unknown }>;
     play: (materialId: string, id: string, audio: unknown, type?: string) => void;
     stop: () => void;
@@ -86,6 +88,8 @@ class TrustedInstance {
             say: (text: unknown) => host.say(String(text ?? "")),
             toast: (text: unknown) => host.toast(String(text ?? "")),
             mark: (id: unknown, state: unknown) => host.mark(materialId, String(id ?? ""), state === "busy" || state === "playing" ? state : ""),
+            /** 登记对白按钮：mix.dialogueButton({ icon: "speaker", title: "朗读这句" })；传 null 撤掉 */
+            dialogueButton: (spec: unknown) => host.dialogueButton(materialId, normalizeMixDialogueButton(spec) ?? null),
             call: (name: unknown, params: unknown) => host.call(materialId, String(name ?? ""), (params && typeof params === "object" ? params : {}) as MixConnectorParams),
             play: (id: unknown, audio: unknown, type?: unknown) => host.play(materialId, String(id ?? ""), audio, typeof type === "string" ? type : undefined),
             stop: () => host.stop(),

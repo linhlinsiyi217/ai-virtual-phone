@@ -449,22 +449,32 @@ async function runXiaohongshuImageMaintenance(result: MediaMaintenanceResult, no
   let changed = false;
 
   for (const note of state.notes) {
-    if (!note.imageAssetId) continue;
+    // 多图帖子把全部图片一起清理/压缩；旧单图帖子只有 imageAssetId
+    const assetIds = note.imageAssetIds?.length
+      ? note.imageAssetIds
+      : (note.imageAssetId ? [note.imageAssetId] : []);
+    if (assetIds.length === 0) continue;
     if (isOlderThan(note.createdAt, CLEAN_AFTER_MS, nowMs)) {
       state = updateXiaohongshuStateNotes(state, item =>
-        item.id === note.id ? { ...item, imageAssetId: undefined, imageCleanedAt: nowIso, updatedAt: nowIso } : item
+        item.id === note.id
+          ? { ...item, imageAssetId: undefined, imageAssetIds: undefined, imageCleanedAt: nowIso, updatedAt: nowIso }
+          : item
       );
       result.xiaohongshuImagesCleaned += 1;
       changed = true;
       continue;
     }
     if (note.imageCompressedAt || !isOlderThan(note.createdAt, COMPRESS_AFTER_MS, nowMs)) continue;
-    const compressed = await compressThemeAssetById(note.imageAssetId).catch(() => ({ changed: false, freedBytes: 0 }));
+    let anyCompressed = false;
+    for (const assetId of assetIds) {
+      const compressed = await compressThemeAssetById(assetId).catch(() => ({ changed: false, freedBytes: 0 }));
+      result.freedBytes += compressed.freedBytes;
+      if (compressed.changed) anyCompressed = true;
+    }
     state = updateXiaohongshuStateNotes(state, item =>
       item.id === note.id ? { ...item, imageCompressedAt: nowIso, updatedAt: nowIso } : item
     );
-    result.freedBytes += compressed.freedBytes;
-    if (compressed.changed) result.xiaohongshuImagesCompressed += 1;
+    if (anyCompressed) result.xiaohongshuImagesCompressed += 1;
     changed = true;
   }
 

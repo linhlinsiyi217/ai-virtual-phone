@@ -101,7 +101,7 @@ export function createBuiltinChecklist(): MixTextMaterial {
 export const MIX_BUILTIN_READER_ID = "mix_builtin_reader";
 
 /**
- * 官方机括「朗读」：对白按钮 + 连接器 + 无界面运行的样板。
+ * 官方机括「朗读」：对白按钮（代码登记）+ 连接器 + 无界面运行的样板。
  * 每句「对白」后面一颗喇叭，点了才把这句交给玩家的 tts 连接器合成，不点不花钱；
  * 合成结果递给宿主播放（mix.play），按钮状态由宿主画；出错用 mix.toast 说一句。
  * 不画任何面板。需要玩家在酒柜「连接器」里用「MiniMax 语音」预设建一个叫 tts 的连接器。
@@ -115,11 +115,12 @@ export function createBuiltinReader(): MixMechanismMaterial {
         author: "独家特调",
         tags: ["官方", "语音", "连接器"],
         connectors: ["tts"],
-        dialogueButton: { icon: "speaker", title: "朗读这句" },
         layout: { x: 0, y: 0, w: 100, h: 10, slot: "hidden" },
         panelHtml: [
             "<script>",
             "(function(){",
+            "  // 对白按钮由代码登记：每句对白后一颗喇叭",
+            "  window.mix.dialogueButton({ icon: 'speaker', title: '朗读这句' });",
             "  var playingId='', cache={}, cacheKeys=[];",
             "  function hexToBytes(hex){",
             "    var n=hex.length>>1, bytes=new Uint8Array(n);",

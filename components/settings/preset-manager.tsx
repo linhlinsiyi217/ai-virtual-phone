@@ -536,6 +536,7 @@ export function PresetManager({ isActive = true }: { isActive?: boolean } = {}) 
                             });
                         }
                         const prompt = { ...prompts[promptIdx] };
+                        const previousIdentifier = prompt.identifier;
                         if (subfield === "identifier") {
                             prompt.identifier = value;
                             handled = true;
@@ -584,8 +585,24 @@ export function PresetManager({ isActive = true }: { isActive?: boolean } = {}) 
                         for (let pi = 0; pi < prompts.length; pi++) {
                             prompts[pi] = { ...prompts[pi], system_prompt: pi === firstSystemIdx };
                         }
-                        // Auto-generate prompt_order from array order
-                        preset.prompt_order = prompts.filter(p => p.identifier && !p.identifier.startsWith("_placeholder")).map(p => ({ identifier: p.identifier, enabled: true }));
+                        // 顺序表保留现有顺序与开关：被改名的条目映射到新 identifier，新条目追加到
+                        // 末尾，已不存在或仍是占位符的剔除。不能按数组顺序重建，否则用户拖好的顺序
+                        // 会被打回创建顺序，开关状态也会全部变成开启。
+                        const validIds = new Set(prompts.filter(p => p.identifier && !p.identifier.startsWith("_placeholder")).map(p => p.identifier));
+                        const seenIds = new Set<string>();
+                        const nextOrder: PromptOrderEntry[] = [];
+                        for (const entry of preset.prompt_order ?? []) {
+                            const id = entry.identifier === previousIdentifier ? prompt.identifier : entry.identifier;
+                            if (!validIds.has(id) || seenIds.has(id)) continue;
+                            seenIds.add(id);
+                            nextOrder.push({ identifier: id, enabled: entry.enabled !== false });
+                        }
+                        for (const p of prompts) {
+                            if (!validIds.has(p.identifier) || seenIds.has(p.identifier)) continue;
+                            seenIds.add(p.identifier);
+                            nextOrder.push({ identifier: p.identifier, enabled: true });
+                        }
+                        preset.prompt_order = nextOrder;
                     }
                 }
 
@@ -912,14 +929,18 @@ export function PresetManager({ isActive = true }: { isActive?: boolean } = {}) 
             injection_depth: 0,
             enabled: true,
         };
-        const newPrompts = [...(preset.prompts || []), newPrompt];
-        const newOrder = newPrompts.map(p => ({
+        // 顺序表以当前显示顺序为基础追加，不能按 prompts 数组重建：拖动排序只改
+        // prompt_order、不动数组，按数组重建会把用户拖好的顺序打回创建顺序。
+        const displayed = buildDisplayedPrompts(preset);
+        const newOrder = [...displayed, newPrompt].map(p => ({
             identifier: p.identifier,
-            enabled: preset.prompt_order
-                ? (preset.prompt_order.find(o => o.identifier === p.identifier)?.enabled ?? p.enabled)
-                : p.enabled,
+            enabled: p.identifier === newPrompt.identifier
+                ? true
+                : (preset.prompt_order
+                    ? (preset.prompt_order.find(o => o.identifier === p.identifier)?.enabled ?? p.enabled)
+                    : p.enabled),
         }));
-        updatePreset(preset.id, { prompts: newPrompts, prompt_order: newOrder });
+        updatePreset(preset.id, { prompts: [...(preset.prompts || []), newPrompt], prompt_order: newOrder });
     };
 
     const appendImportedPrompts = (preset: PresetConfig, raws: unknown[]) => {
@@ -940,11 +961,15 @@ export function PresetManager({ isActive = true }: { isActive?: boolean } = {}) 
             return { ...p, identifier: id };
         });
         const newPrompts = [...(preset.prompts || []), ...appended];
-        const newOrder = newPrompts.map(p => ({
+        // 同 createPromptAtEnd：以显示顺序为基础追加，保住用户拖好的顺序
+        const appendedIds = new Set(appended.map(p => p.identifier));
+        const newOrder = [...buildDisplayedPrompts(preset), ...appended].map(p => ({
             identifier: p.identifier,
-            enabled: preset.prompt_order
-                ? (preset.prompt_order.find(o => o.identifier === p.identifier)?.enabled ?? p.enabled)
-                : p.enabled,
+            enabled: appendedIds.has(p.identifier)
+                ? p.enabled
+                : (preset.prompt_order
+                    ? (preset.prompt_order.find(o => o.identifier === p.identifier)?.enabled ?? p.enabled)
+                    : p.enabled),
         }));
         updatePreset(preset.id, { prompts: newPrompts, prompt_order: newOrder });
         if (appended.length === 1) setEditingPromptId(appended[0].identifier);

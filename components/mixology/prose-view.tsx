@@ -28,7 +28,7 @@ const DIALOGUE_ICONS: Record<string, (size: number) => ReactNode> = {
     spark: (size) => <Sparkles size={size} strokeWidth={2} />,
 };
 
-export const MIX_DIALOGUE_ICON_NAMES = Object.keys(DIALOGUE_ICONS);
+export { MIX_DIALOGUE_ICON_NAMES } from "@/lib/mixology/types";
 
 export function renderMixDialogueIcon(icon: string, size = 12): ReactNode {
     const named = DIALOGUE_ICONS[icon.trim().toLowerCase()];

@@ -225,8 +225,11 @@ function MixMechanismStage({ target }: { target: Extract<MixPreviewTarget, { kin
     const [said, setSaid] = useState<string[]>([]);
     // 对白按钮试点：声明了 dialogueButton 的机括，示例正文里每句对白后也画按钮，点了真递进界面
     const [marks, setMarks] = useState<Record<string, string>>({});
+    // 代码里 mix.dialogueButton 登记的按钮（材料上填的旧写法也认）
+    const [runtimeButton, setRuntimeButton] = useState<MixDialogueButton | null>(null);
+    const handleDialogueButton = useCallback((_id: string, button: MixDialogueButton | null) => setRuntimeButton(button), []);
     const dialogue = useMemo<MixProseDialogue | undefined>(() => {
-        const button = target.dialogueButton;
+        const button = runtimeButton ?? target.dialogueButton;
         if (!button?.icon || !(target.html.trim() || (target.trusted && target.script.trim()))) return undefined;
         return {
             actions: [{ key: MECH_MATERIAL, icon: button.icon, title: button.title || target.name }],
@@ -238,7 +241,7 @@ function MixMechanismStage({ target }: { target: Extract<MixPreviewTarget, { kin
                 else sendMixDialogue(MECH_MATERIAL, { id: segmentId, text, turnId: "preview" });
             },
         };
-    }, [target.dialogueButton, target.html, target.name, target.trusted, target.script, marks]);
+    }, [runtimeButton, target.dialogueButton, target.html, target.name, target.trusted, target.script, marks]);
     const [turn, setTurn] = useState(0);
     const [running, setRunning] = useState<MixHook | "">("");
     const [result, setResult] = useState<{ hook: MixHook; lines: string[] } | null>(null);
@@ -304,6 +307,7 @@ function MixMechanismStage({ target }: { target: Extract<MixPreviewTarget, { kin
         say: (text) => setSaid((prev) => [...prev.slice(-2), text]),
         toast: pushToast,
         mark: (_id, id, st) => setMarks((prev) => { const key = `${MECH_MATERIAL}|${id}`; const next = { ...prev }; if (st) next[key] = st; else delete next[key]; return next; }),
+        dialogueButton: (_id, button) => setRuntimeButton(button),
         call: async () => { throw new Error("试摆里不调连接器，进对局再试。"); },
         play: () => pushToast("试摆里不播放音频，进对局再试。"),
         stop: () => undefined,
@@ -355,6 +359,7 @@ function MixMechanismStage({ target }: { target: Extract<MixPreviewTarget, { kin
                                 onState={(patch) => setState((prev) => ({ ...prev, ...patch }))}
                                 onSay={(text) => setSaid((prev) => [...prev.slice(-2), text])}
                                 connectors={target.connectors}
+                                onDialogueButton={handleDialogueButton}
                                 onMark={(_id, id, st) => setMarks((prev) => {
                                     const key = `${MECH_MATERIAL}|${id}`;
                                     const next = { ...prev };
@@ -378,6 +383,7 @@ function MixMechanismStage({ target }: { target: Extract<MixPreviewTarget, { kin
                             onSay={(text) => setSaid((prev) => [...prev.slice(-2), text])}
                             onBox={(_id, next) => setBox(next)}
                             connectors={target.connectors}
+                                onDialogueButton={handleDialogueButton}
                             onMark={(_id, id, state) => setMarks((prev) => {
                                 const key = `${MECH_MATERIAL}|${id}`;
                                 const next = { ...prev };
